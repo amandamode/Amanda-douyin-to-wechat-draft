@@ -50,7 +50,7 @@ python3 scripts/grab_stream.py --help
 
 修改 `SKILL.md` 正文时注意：
 
-- `@references/xxx.md` 引用的文件必须真实存在
+- `@references/` 下引用的 .md 文件必须真实存在
 - `description` 要写**确定性触发场景**（含触发词），不要写「可能/也许/万能」这类模糊词——平台审核会据此驳回
 - `version` 用语义化版本（见下）
 

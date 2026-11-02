@@ -124,7 +124,7 @@ douyin-to-wechat-draft/
 ├── requirements.txt              # 依赖声明（Playwright / faster-whisper）
 ├── config.example.env            # 配置模板（含 API 地址占位符，无密钥）
 ├── .gitignore
-├── references/                   # 详细实现（SKILL.md 用 @references/xxx.md 引用）
+├── references/                   # 详细实现（SKILL.md 用 @references/ 引用各 .md）
 │   ├── transcribe.md             # 抓流 + 转写 + 错字修正
 │   ├── image-selection.md        # 配图与封面（命名与压缩硬约定）
 │   ├── html-template.md          # 公众号版式 + base64 注入

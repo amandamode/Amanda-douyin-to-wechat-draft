@@ -54,7 +54,8 @@ curl -s -L -m 180 -o video.mp4 \
 ffmpeg -y -loglevel error -i video.mp4 -vn -ac 1 -ar 16000 -c:a pcm_s16le audio.wav
 
 # 4) 转写（模型已缓存时可全离线）
-HF_HUB_OFFLINE=1 python3 transcribe.py    # 见 references/transcribe.md
+#    转写脚本已独立为 douyin-to-transcript 技能（去该技能 scripts 目录下取转写脚本），
+#    或按 references/transcribe.md 在本包内手动跑 faster-whisper
 
 # 5) 推送
 python3 scripts/push_draft.py \

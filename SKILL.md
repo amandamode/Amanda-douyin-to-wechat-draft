@@ -13,7 +13,7 @@ examples_en:
 - "Push this Douyin link to my WeChat draft: https://v.douyin.com/XXXXXX/"
 - "Polish and send to Official Account: https://v.douyin.com/YYYYYY/"
 - "Repurpose my short-video into a WeChat article"
-version: 1.2.0
+version: 1.2.1
 author: Amanda
 allowed-tools: Bash, Read
 ---
@@ -28,7 +28,7 @@ allowed-tools: Bash, Read
 | 项 | 值 |
 |---|---|
 | 技能标识 | `douyin-to-wechat-draft`（平台 slug，全平台唯一，发布后不可改） |
-| 版本 | 1.2.0 |
+| 版本 | 1.2.1 |
 | 作者 | Amanda |
 | 许可证 | MIT |
 | 仓库 | https://github.com/amandamode/Amanda-douyin-to-wechat-draft |

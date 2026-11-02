@@ -2,6 +2,18 @@
 
 本文件记录每个版本的改动，便于回溯与审核。
 
+## v1.2.1 — 2026-11-02
+
+开放平台审核驳回修复（评级结论「内置文件缺失」）。
+
+### 修复
+- `references/examples.md`：移除对已迁出独立技能 `douyin-to-transcript` 的 `transcribe.py`
+  字面引用（平台扫描 examples.md 发现引用文件不存在 → 判定「资产包缺少必需资源」）。
+  改为指向本包真实存在的 `references/transcribe.md`，并提示转写脚本已独立为 `douyin-to-transcript` 技能
+- `README.md` / `CONTRIBUTING.md`：把说明性占位 `references/xxx.md` 改为不带路径 token 的写法，
+  规避字面路径被平台扫描误判为缺失文件
+- `SKILL.md` / `README.md`：`version` → 1.2.1
+
 ## v1.2.0 — 2026-11-02
 
 ### 新增
