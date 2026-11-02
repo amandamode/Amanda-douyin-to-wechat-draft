@@ -9,10 +9,16 @@
 | `yt-dlp <抖音链接>` | ❌ `Fresh cookies (not necessarily logged in) are needed` |
 | curl 抓分享页 HTML | ❌ JS 渲染，拿不到内容 |
 | 页面 `<video>` 标签的 src | ❌ 是 `blob:` MSE 流，无法下载 |
+| 分享页 `_ROUTER_DATA` 里找 `playAddr` | ❌ **2026-11-02 实测已失效**：只剩 ua/query/renderInSSR 等路由元数据（1399 字节），无播放地址 |
+| `iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=<id>` | ❌ 返回 **0 字节**（接口已废弃） |
+| `douyin.com/aweme/v1/web/aweme/detail/?aweme_id=<id>` | ❌ `Blocked by ArgusSecurityPlugin Uifid Not Found`，桌面 web API 全走签名 |
+
+> **结论（2026-11-02）**：抖音的分享页与开放接口都已封死，**只能在真实浏览器里执行 JS 取流**。
+> `agent-browser` 命令在多数机器上并不存在，请用 `scripts/grab_stream.py`（Playwright 驱动系统 Chrome）。
 
 ## 正确链路
 
-### 1. 拿到视频 ID 和作者
+### 1. 拿到视频 ID
 
 ```bash
 curl -s -o /dev/null -w "%{url_effective}\n" -L -m 20 \
@@ -21,67 +27,52 @@ curl -s -o /dev/null -w "%{url_effective}\n" -L -m 20 \
 # → https://www.iesdouyin.com/share/video/<VIDEO_ID>/?...
 ```
 
-作者昵称、点赞数、发布时间都在 **meta description** 里，用 agent-browser 取：
+### 2. 抓流地址 + 作者信息（浏览器内 JS）
+
+**首选：`scripts/grab_stream.py`**（Playwright 驱动系统已装的 Chrome，不需要下载浏览器内核）
 
 ```bash
-agent-browser open "https://www.iesdouyin.com/share/video/<VIDEO_ID>/"
-agent-browser eval "Array.from(document.querySelectorAll('meta')).map(m=>(m.getAttribute('name')||m.getAttribute('property')||'')+' = '+(m.getAttribute('content')||'')).filter(x=>/description/i.test(x)).join('\n')"
+python3 scripts/grab_stream.py <VIDEO_ID>
+# 输出 {video_id, url, method, meta, video_duration}
 ```
 
-> ⚠️ **首次打开常是 `chrome-error://chromewebdata/` + `ERR_PROXY_CONNECTION_FAILED`**。
-> 别急着换方法，先 `agent-browser close` 再重开一次就好。开完 `agent-browser eval "location.href"`
-> 确认已跳到 `www.douyin.com/video/<ID>`，**没跳转时取 meta 会得到空字符串**。
+- `meta` 里含「`<标题>` - `<作者昵称>`于`YYYYMMDD`发布在抖音，已经收获了`N`个喜欢」
+  → **用它判断这是不是用户自己的号**（涉及版权，是别人视频不要直接搬）
+- `video_duration` 是秒数，可用来判断篇幅（70 秒 ≈ 330 字口语）
 
-meta description 里含「`<标题>` - `<作者昵称>`于`YYYYMMDD`发布在抖音，已经收获了`N`个喜欢」。
-**这一步很关键**：用它判断这是不是用户自己的号（涉及版权，是别人视频的话不要直接搬）。
+前置：`pip install playwright` + 系统装有 Google Chrome（脚本用 `channel="chrome"`）。
+若报 `Executable doesn't exist`，说明 playwright 内核没装，**不要**去 `playwright install`，
+用 `channel="chrome"` 即可（脚本默认如此）。
 
-### 2. 抓流地址（核心技巧）
+> ⚠️ **必须 headed**（不要加 `--headless`）：抖音对 headless 更敏感。
+> 脚本已带 `--autoplay-policy=no-user-gesture-required` + 静音播放，这是让媒体资源进 `performance` 的前提。
 
-**首选：从 performance 里挖纯音频流 `media-audio-und-mp4a`**
+### 2b. 三条取流路径（并列，谁先命中用谁）
 
-```bash
-# 先静音播一下，资源才会进 performance
-agent-browser eval "var v=document.querySelector('video'); v?(v.muted=true, v.play(), 'playing dur='+v.duration):'no-video'"
-sleep 8
-agent-browser eval "performance.getEntriesByType('resource').map(e=>e.name).filter(n=>/media-audio-und-mp4a/.test(n)).pop()"
-```
+**2026-11-02 实测：`performance` 未命中纯音频流，但 `video.currentSrc` 直接拿到完整视频流（br=1308）。**
+所以**不要把 performance 当唯一首选**，两条并列试：
 
-拿到的是**纯音频**，265 秒视频只有 **2.1 MB**（对比完整视频流十几 MB），下载和转码都快一大截。
-同一次播放里还会有 `media-video-avc1`（视频）——**别选它**。
+| 路径 | 拿到什么 | 说明 |
+|---|---|---|
+| `performance` 过滤 `media-audio-und-mp4a` | **纯音频** | 最优：265 秒视频只 2.1 MB，下载转码都快一大截。同一次播放里的 `media-video-avc1` 是视频，**别选它** |
+| `video.currentSrc` | **完整视频流** | 形如 `.../video/tos/cn/.../?a=6383&br=1308&...`。2026-11-02 实测这条直接可用 |
+| 页面 HTML 正则搜 `douyinvod` | 直链 | 前两条都失效时的兜底。注意 `&` 被转义成 `&amp;`，要还原 |
 
-**回退一：`<video>.currentSrc`**（完整视频流）
+拿到的是 `blob:` 说明走 MSE，三条都失效 → 换 headed 重试，或让用户手动提供视频文件。
 
-```bash
-agent-browser eval "document.querySelector('video').currentSrc"
-```
+### 2c. 取 URL 的引号坑（不处理必 404）
 
-**回退二：直接在页面 HTML 里正则搜**
-
-```bash
-agent-browser eval "var s=new Set(); (document.documentElement.innerHTML.match(/https:[^\"'\\s]*douyinvod[^\"'\\s]*/g)||[]).forEach(function(u){s.add(u.replace(/&amp;/g,'&'))}); Array.from(s).join('\n')"
-```
-
-> ⚠️ 三条路都要试，别只认一条：
-> - performance 抓不到 douyinvod（走 MSE）时 → 回退 currentSrc
-> - currentSrc 返回 `blob:`（MSE）时 → 回退搜 HTML
->
-> 顺序建议：**performance 找 audio 流 > currentSrc > 搜 HTML**。
-
-### 2b. 取 URL 的引号坑（不处理必 404）
-
-`agent-browser eval` 的返回值外面包着 JSON 引号，直接拼进 curl 会 404。先剥掉：
+脚本输出的是 JSON，取 `url` 字段时记得剥掉引号：
 
 ```bash
 PY=python3
-URL=$(agent-browser eval "document.querySelector('video').currentSrc" 2>/dev/null | $PY -c "import sys,json;raw=sys.stdin.read().strip();
-try: print(json.loads(raw))
-except Exception: print(raw.strip('\"'))")
+URL=$($PY -c "import json;print(json.load(open('stream_result.json'))['url'])")
 ```
 
 ### 3. 立刻下载（URL 有签名时效）
 
 ```bash
-curl -s -L -m 180 -o audio.mp4 \
+curl -s -L -m 180 -o video.mp4 \
   -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
   -e "https://www.douyin.com/" "<上一步的 URL>"
 ```
@@ -91,7 +82,7 @@ curl -s -L -m 180 -o audio.mp4 \
 ### 4. 转码
 
 ```bash
-ffmpeg -y -loglevel error -i audio.mp4 -vn -ac 1 -ar 16000 -c:a pcm_s16le audio.wav
+ffmpeg -y -loglevel error -i video.mp4 -vn -ac 1 -ar 16000 -c:a pcm_s16le audio.wav
 ```
 
 ### 5. 转写（faster-whisper）
@@ -134,6 +125,8 @@ PY
 > **模型下载超时**：`small` 走镜像实测可能要 5–8 分钟，直接前台跑「下载+转写」易撞 Bash 9 分钟超时被 SIGTERM。正确姿势：先用 `huggingface_hub.snapshot_download("Systran/faster-whisper-small")`（挂镜像、前台 10 分钟超时）把模型单独下完，再跑转写；转写本身 167s 音频只要 1–2 分钟。
 >
 > **snapshot_download 抽风修复**：镜像 API 间歇性返回空会报 `LocalEntryNotFoundError`，但 model.bin 往往已完整落盘。修复：把缺的小文件直接下进 snapshot 目录，再改成传本地路径 `WhisperModel(<snapshot_dir>, ...)` 并设 `HF_HUB_OFFLINE=1` 彻底避开网络。
+>
+> **模型已缓存时可以完全离线**：`HF_HUB_OFFLINE=1` + `WhisperModel(<snapshot_dir>, ...)`，连 `initial_prompt` 都不影响速度（2026-11-02 实测 70 秒音频整条链路 21 秒跑完）。
 
 ## 转写完必做：同音错字修正
 
@@ -161,12 +154,30 @@ Whisper 的中文错字有固定套路，**逐字稿不能直接用**，至少�
 | 天专家瓦 | 添砖加瓦 |
 | 长暗 | 惨案 |
 | 热终于制造 | 热衷于制造 |
+| 深讨 | 声讨 |
+| 心疯作浪 | 兴风作浪 |
+| 送容 | 容忍 |
+| 自念供养 | 自恋供养 |
+| 作者令人匪夷所思的事 | 做着令人匪夷所思的事 |
 
 规律：**同音不同调、近音词、专有名词**最容易错。带 `initial_prompt` 提示主题能减少一部分。
 
+### 拿不准的词：切片对照复听，不要瞎猜
+
+单个 2–4 秒的存疑处，**切出来用不同 `initial_prompt` 各转一次**，
+看输出是否随提示词漂移：
+
+```bash
+ffmpeg -y -loglevel error -ss 9.5 -t 3.2 -i audio.wav clip.wav
+# 再用「提示含 A」「提示含 B」「无提示」「整句」四种条件各转一次，beam_size=10, temperature=0
+```
+
+- 若**所有变体都输出同一个词**（例：提示「我妈」时仍输出「我哥」）→ 该词是原词，放心用
+- 若输出随提示词漂移 → 无法还原，按下面「彻底还原不出来」处理
+
 ### 语音彻底还原不出来的怎么办
 
-有些错字听不出原词，**不要瞎猜硬填**：
+有些错字听不出原词（如今天的「欺诚」→ 可能是「凄惨 / 悲情 / 惨烈」），**不要瞎猜硬填**：
 
 1. 优先按上下文**改写整句**绕开那个词（保住意思，放弃原词）
 2. 在交付时**明确列出存疑处**，让用户自己回忆原话

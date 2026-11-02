@@ -13,7 +13,7 @@ examples_en:
 - "Push this Douyin link to my WeChat draft: https://v.douyin.com/XXXXXX/"
 - "Polish and send to Official Account: https://v.douyin.com/YYYYYY/"
 - "Repurpose my short-video into a WeChat article"
-version: 1.0.0
+version: 1.1.0
 author: Amanda
 allowed-tools: Bash, Read
 ---
@@ -45,14 +45,18 @@ curl -s -o /dev/null -w "%{url_effective}\n" -L -m 20 \
   "https://v.douyin.com/XXXXXX/"
 ```
 
-用 agent-browser 打开分享页，从 `meta description` 取作者昵称、点赞数、发布时间（含「`<标题>` - `<作者>`于`YYYYMMDD`发布在抖音，已经收获了`N`个喜欢」）。
+用 `scripts/grab_stream.py` 打开视频页，从 `meta description` 取作者昵称、点赞数、发布时间（含「`<标题>` - `<作者>`于`YYYYMMDD`发布在抖音，已经收获了`N`个喜欢」）。
 
 - **是用户自己的号** → 继续。
 - **是别人的视频** → 停下来，提醒版权风险，**不搬运**。
 
 ### 2. 抓流 + 转写 → 逐字稿
 
-完整链路（performance 抓纯音频流 → ffmpeg → faster-whisper → 同音错字修正）见 `@references/transcribe.md`。
+```bash
+python3 scripts/grab_stream.py <VIDEO_ID>     # 取流地址 + meta + 时长
+```
+
+完整链路（浏览器内取流 → 立即下载 → ffmpeg → faster-whisper → 同音错字修正）见 `@references/transcribe.md`。
 这一步产出原始逐字稿文本，是后续所有环节的输入。
 
 ### 3. 同音错字修正
@@ -78,7 +82,8 @@ Whisper 中文错字有固定套路（同音不同调、近音词、专有名词
 
 ### 7. 生成封面
 
-按 `@references/html-template.md` 的尺寸要求生成 2350×1000 与 1080×1080 两张封面（真实摄影，禁用 AI 生图）。
+按 `@references/html-template.md` 的尺寸要求生成封面（真实摄影，禁用 AI 生图）。
+**脚本不压缩封面**，务必自己先压到 ≤100KB（建议 900×383）——见 `@references/image-selection.md`。
 
 ### 8. AI 味自检（可选）
 
@@ -115,16 +120,17 @@ python3 scripts/push_draft.py \
 | 依赖 | 说明 |
 |---|---|
 | ffmpeg | 音频转码（`-vn -ac 1 -ar 16000 -c:a pcm_s16le`） |
-| faster-whisper | 本地转写（`vad_filter=False`，模型下载挂 `HF_ENDPOINT=https://hf-mirror.com` 镜像） |
-| agent-browser | 抓抖音视频流地址（见 `@references/transcribe.md`） |
+| faster-whisper | 本地转写（`vad_filter=False`，模型下载挂 `HF_ENDPOINT=https://hf-mirror.com` 镜像；模型已缓存时用 `HF_HUB_OFFLINE=1` 全离线跑） |
+| playwright + Google Chrome | 抓抖音视频流地址（`scripts/grab_stream.py`，用 `channel="chrome"` 驱动系统 Chrome，**无需下载 playwright 内核**） |
 | 微信凭证 | `WECHAT_APPID` / `WECHAT_SECRET`，来自公众号后台「开发信息」；个人主体订阅号无群发 API 权限 |
 | Python 3 | 运行 `scripts/push_draft.py`（仅用标准库） |
 
 ## 已知限制
 
 - 抓流 URL 有签名时效（分钟级），拿到立刻下载。
-- 抖音页面结构会变，抓流失效时回退 `currentSrc`（见 `@references/transcribe.md`）。
-- 微信 API 有 IP 白名单，`40164` 表示出口 IP 不在白名单；处理见 `@references/troubleshooting.md`。
+- 抖音的**分享页与开放接口都已封死**（`_ROUTER_DATA` 无播放地址、iteminfo 返回空、detail 被 Argus 拦），只能在真实浏览器里取流；页面走 MSE 时流是 `blob:`，三条路径全失效。
+- **headless 容易被风控**，抓流脚本默认 headed。
+- 微信 API 有 IP 白名单，`40164` 表示出口 IP 不在白名单（只能加白名单，本包无免白名单通道）；处理见 `@references/troubleshooting.md`。
 - 发布必须用户手动操作，本 skill 只负责推到草稿箱。
 
 详细排错见 `@references/troubleshooting.md`。

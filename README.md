@@ -19,6 +19,7 @@
 douyin-to-wechat-draft/
 ├── SKILL.md                  # 技能定义（官方 frontmatter + 步骤）
 ├── references/               # 详细实现：转写 / 配图 / HTML模板 / 排错
+├── scripts/grab_stream.py    # 抓流地址（Playwright 驱动系统 Chrome）
 ├── scripts/push_draft.py     # 推送脚本（仅标准库）
 ├── templates/article_raw.html
 ├── README.md
@@ -30,8 +31,8 @@ douyin-to-wechat-draft/
 | 依赖 | 用途 |
 |---|---|
 | ffmpeg | 音频转码 |
-| faster-whisper | 本地转写（`vad_filter=False`，模型下载挂 `HF_ENDPOINT=https://hf-mirror.com` 镜像） |
-| agent-browser | 抓取抖音视频流地址 |
+| faster-whisper | 本地转写（`vad_filter=False`，模型下载挂 `HF_ENDPOINT=https://hf-mirror.com` 镜像；模型已缓存可全离线跑） |
+| playwright + Google Chrome | 抓取抖音视频流地址（`scripts/grab_stream.py`，用 `channel="chrome"` 驱动系统 Chrome，**无需下载 playwright 内核**） |
 | Python 3 | 运行 `scripts/push_draft.py`（仅标准库，无第三方依赖） |
 | 微信凭证 | `WECHAT_APPID` / `WECHAT_SECRET`，来自公众号后台「开发信息」 |
 
