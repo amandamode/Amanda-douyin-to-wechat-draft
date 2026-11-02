@@ -13,7 +13,7 @@ examples_en:
 - "Push this Douyin link to my WeChat draft: https://v.douyin.com/XXXXXX/"
 - "Polish and send to Official Account: https://v.douyin.com/YYYYYY/"
 - "Repurpose my short-video into a WeChat article"
-version: 1.1.0
+version: 1.2.0
 author: Amanda
 allowed-tools: Bash, Read
 ---
@@ -22,6 +22,22 @@ allowed-tools: Bash, Read
 
 用户甩一条自己的抖音口播链接，要求「推到草稿箱 / 润色后发公众号 / 一鱼两吃」时，走这条端到端链路。
 全程无需用户提供脚本外的任何东西；最终**发布需用户手动点**（个人主体订阅号无 API 发布权限，绕不过）。
+
+## 元信息
+
+| 项 | 值 |
+|---|---|
+| 技能标识 | `douyin-to-wechat-draft`（平台 slug，全平台唯一，发布后不可改） |
+| 版本 | 1.2.0 |
+| 作者 | Amanda |
+| 许可证 | MIT |
+| 仓库 | https://github.com/amandamode/Amanda-douyin-to-wechat-draft |
+| 适用平台 | WorkBuddy（macOS / Linux / Windows）· 抖音网页版 · 微信公众号公众平台 |
+| 依赖声明 | `requirements.txt`（Playwright / faster-whisper；`push_draft.py` 仅用标准库） |
+| 配置模板 | `config.example.env`（含 `WECHAT_APPID` / `WECHAT_SECRET` / `WECHAT_API_BASE` 占位符，**无任何真实密钥**） |
+| 使用示例 | `@references/examples.md` |
+| 常见问题 | `@references/faq.md` |
+| 接口规范 | `@references/api-spec.md` |
 
 ## 何时使用
 
@@ -95,14 +111,17 @@ Whisper 中文错字有固定套路（同音不同调、近音词、专有名词
 ```bash
 python3 scripts/push_draft.py \
   --html "可粘贴版.html" \
-  --cover "cover-2350x1000.jpg" \
+  --cover "cover.jpg" \
   --digest "最想被转发的那句，≤120字" \
   --author "你的作者名" \
-  --images-dir "images"
+  --images-dir "images" \
+  --env "$HOME/.workbuddy/secrets/wechat-mp.env"
 ```
 
 脚本会：注入 base64 → 取 token → 上传正文图 → 传封面拿 `thumb_media_id` → `draft/add`，末尾打印 `MEDIA_ID` 与回读核验命令。
-凭证从环境变量 `WECHAT_APPID` / `WECHAT_SECRET` 读取，缺失时回退到 `--env` 指定的 `.env` 文件（默认 `~/.workbuddy/secrets/wechat-mp.env`）。**切勿把密钥写进 skill 或提交到仓库。**
+凭证从环境变量 `WECHAT_APPID` / `WECHAT_SECRET` 读取，缺失时回退到 `--env` 指定的 `.env` 文件（默认 `~/.workbuddy/secrets/wechat-mp.env`）。
+**API 地址可配**：`--api-base` > 环境变量 `WECHAT_API_BASE` > `.env` 文件 > 默认 `https://api.weixin.qq.com`。
+**切勿把密钥写进 skill 或提交到仓库。** 字段与接口细节见 `@references/api-spec.md`。
 
 ### 10. 回读核验摘要
 
@@ -121,7 +140,7 @@ python3 scripts/push_draft.py \
 |---|---|
 | ffmpeg | 音频转码（`-vn -ac 1 -ar 16000 -c:a pcm_s16le`） |
 | faster-whisper | 本地转写（`vad_filter=False`，模型下载挂 `HF_ENDPOINT=https://hf-mirror.com` 镜像；模型已缓存时用 `HF_HUB_OFFLINE=1` 全离线跑） |
-| playwright + Google Chrome | 抓抖音视频流地址（`scripts/grab_stream.py`，用 `channel="chrome"` 驱动系统 Chrome，**无需下载 playwright 内核**） |
+| playwright + Google Chrome | 抓抖音视频流地址（`scripts/grab_stream.py`，用 `channel="chrome"` 驱动系统 Chrome，**无需下载 playwright 内核**；`pip install -r requirements.txt`） |
 | 微信凭证 | `WECHAT_APPID` / `WECHAT_SECRET`，来自公众号后台「开发信息」；个人主体订阅号无群发 API 权限 |
 | Python 3 | 运行 `scripts/push_draft.py`（仅用标准库） |
 

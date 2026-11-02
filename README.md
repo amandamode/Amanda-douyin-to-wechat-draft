@@ -1,112 +1,181 @@
 # 抖音口播转公众号草稿箱（douyin-to-wechat-draft）
 
-把一条抖音口播视频，端到端转成微信公众号图文草稿：提取逐字稿 → 润色 → 配真实摄影图 → 推送草稿箱。
-一个自包含 skill，装上即用，不依赖其他私有 skill。
+把一条抖音口播视频，端到端转成微信公众号图文草稿：**提取逐字稿 → 润色 → 配真实摄影图 → 推送草稿箱**。
+
+一个**自包含** skill：装上即用，不依赖任何私有 skill、也不依赖 `agent-browser` 这类外部命令行工具。
 
 > 本 skill 推到的是**草稿箱**，最终**发布需你在公众号后台手动点**（个人主体订阅号无群发 API 权限）。
 
-## 功能
-
-- 从抖音分享链接（`v.douyin.com`）提取口播逐字稿（本地 faster-whisper，纯本地、不联网转写）
-- 同音错字修正、口语转书面润色（不扩写）
-- Pexels 真实摄影配图（**禁用 AI 生图**）
-- 移动端版式 HTML + base64 内嵌、0 外链
-- `scripts/push_draft.py` 一键推送至微信公众号草稿箱
-
-## 目录结构
-
-```
-douyin-to-wechat-draft/
-├── SKILL.md                  # 技能定义（官方 frontmatter + 步骤）
-├── references/               # 详细实现：转写 / 配图 / HTML模板 / 排错
-├── scripts/grab_stream.py    # 抓流地址（Playwright 驱动系统 Chrome）
-├── scripts/push_draft.py     # 推送脚本（仅标准库）
-├── templates/article_raw.html
-├── README.md
-└── LICENSE
-```
-
-## 前置依赖
-
-| 依赖 | 用途 |
+| 元信息 | 值 |
 |---|---|
-| ffmpeg | 音频转码 |
-| faster-whisper | 本地转写（`vad_filter=False`，模型下载挂 `HF_ENDPOINT=https://hf-mirror.com` 镜像；模型已缓存可全离线跑） |
-| playwright + Google Chrome | 抓取抖音视频流地址（`scripts/grab_stream.py`，用 `channel="chrome"` 驱动系统 Chrome，**无需下载 playwright 内核**） |
-| Python 3 | 运行 `scripts/push_draft.py`（仅标准库，无第三方依赖） |
-| 微信凭证 | `WECHAT_APPID` / `WECHAT_SECRET`，来自公众号后台「开发信息」 |
+| 技能标识（平台 slug） | `douyin-to-wechat-draft`（全平台唯一，发布后不可改） |
+| 版本 | 1.2.0 |
+| 作者 | Amanda |
+| 许可证 | MIT |
+| 仓库 | https://github.com/amandamode/Amanda-douyin-to-wechat-draft |
+| 适用平台 | WorkBuddy（macOS / Linux / Windows）· 抖音网页版 · 微信公众号公众平台 |
+| 依赖运行时 | Python 3.9+ · ffmpeg · Google Chrome · faster-whisper 模型 |
 
-## 凭证配置
+## 功能特性
 
-推送脚本从以下位置读取凭证（**不内嵌任何密钥**）：
+- **逐字稿提取**：浏览器内取流 → ffmpeg 转码 → faster-whisper **本地**转写（音频不出本机）
+- **同音错字修正**：内置中文错字规律表；拿不准的词用**切片 + 多提示词对照复听**判定，不瞎猜
+- **口语转书面润色**：保留原意与第一人称，**不扩写**（70 秒口播 ≈ 450–550 字成稿）
+- **真实摄影配图**：4 张 Pexels 照片构成一条视觉暗线（**禁用 AI 生图**，内容铁律）
+- **移动端版式**：内联样式、图片 base64 内嵌、**0 外链**（微信屏蔽外链）
+- **一键推草稿箱**：`push_draft.py` 走官方 API，末尾打印 `MEDIA_ID` 并给出回读核验代码
+- **配置外置**：密钥只在你本地，仓库里只有占位符模板
 
-1. 环境变量 `WECHAT_APPID` / `WECHAT_SECRET`
-2. 或 `--env` 指定的 `.env` 文件，内容形如：
-   ```
-   WECHAT_APPID=wxXXXXXXXX
-   WECHAT_SECRET=xxxxxxxx
-   ```
+## 安装
 
-## 用法
+### 方式一：WorkBuddy 客户端（推荐）
 
-对话中发抖音链接并说「推到草稿箱 / 润色后发公众号 / 一鱼两吃」即可触发 SKILL.md 的步骤。
-最后一步调用推送脚本：
-
-```bash
-python3 scripts/push_draft.py \
-  --html "可粘贴版.html" \
-  --cover "cover-2350x1000.jpg" \
-  --digest "最想被转发的那句，≤120字" \
-  --author "你的作者名" \
-  --images-dir "images"
-```
-
-查看参数说明：`python3 scripts/push_draft.py --help`
-
-## 本地测试（WorkBuddy）
-
-把整个 `douyin-to-wechat-draft/` 目录复制或软链到 `~/.workbuddy/skills/` 下，重启/刷新后在对话中即可触发：
+1. 从 [开放平台](https://open.workbuddy.cn) 技能市场搜索 `douyin-to-wechat-draft` 安装
+2. 或把本目录软链到 skills 目录：
 
 ```bash
 ln -s "$(pwd)/douyin-to-wechat-draft" ~/.workbuddy/skills/douyin-to-wechat-draft
 ```
 
-## 本地安装须知（与自用流水线共存警告）
+> ⚠️ **不要**与自有的 `douyin-to-wechat-pipeline` 同时激活：两者触发词重叠，
+> 会导致 Agent 行为不确定，并可能向同一草稿箱推重复内容。二选一，或让触发词互斥。
 
-本技能定位为**发布给他人使用的成品**。若你本机已在用私有的 `douyin-to-wechat-pipeline`（抖音→公众号流水线），**请勿把本目录 symlink / 复制进 `~/.workbuddy/skills/` 与之一同激活**，原因：
+### 方式二：源码使用
 
-- 两者 `description` 在「推到草稿箱」「润色后发公众号」上**触发词高度重叠**，同时安装会导致 Agent 随机选其一，行为不确定。
-- 两者都向**同一公众号草稿箱**推送，可能因此产生**重复草稿**。
-
-如需在本地自用本技能，请**二选一**：保留 `douyin-to-wechat-pipeline` 或保留本技能，禁用另一个；或让两者 `description` 触发词互斥。仅发布到市场（见下）不会写入本机 skills 目录，日常流水线不受影响。
-
-## 发布到 WorkBuddy 开放平台
-
-1. 将 `douyin-to-wechat-draft/` 目录压缩为 zip，**确保 `SKILL.md` 位于压缩包根目录**（即 zip 内第一层是 `douyin-to-wechat-draft/` 且该目录内含 `SKILL.md`）。
-2. 打开 [open.workbuddy.cn](https://open.workbuddy.cn) → 添加技能 → 创建技能 → 上传 zip。
-3. 审核通常 1–3 个工作日。
-
-**平台规范注意：**
-- `name`（slug）为 `douyin-to-wechat-draft`，**全平台唯一、发布后不可改**，请确认未占用。
-- `description` 必须写确定性触发场景，不得含「可能/也许/万能」等模糊词。
-- 脚本不得含「下载后执行」、不得读取系统敏感目录；本 skill 的 `push_draft.py` 仅用标准库调用微信 API，符合审核要求。
-- 密钥不上传，仅由使用者本地配置。
-
-## GitHub 开源命名约定
-
-按作者统一规范，**所有开源 skill/插件在 GitHub 仓库名前加 `Amanda-` 前缀**。
-因此本项目的 GitHub 仓库名为：
-
-```
-Amanda-douyin-to-wechat-draft
+```bash
+git clone https://github.com/amandamode/Amanda-douyin-to-wechat-draft.git
+cd Amanda-douyin-to-wechat-draft
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-注意区分两套命名：
-- **平台 `name`（slug）**：`douyin-to-wechat-draft`（平台规则，小写连字符，发布后不可改）
-- **GitHub 仓库名**：`Amanda-douyin-to-wechat-draft`（作者开源命名约定，可自由设定）
+**系统依赖**：`ffmpeg`（音频转码）、`Google Chrome`（抓流所需）。
+脚本用 `channel="chrome"` 驱动系统 Chrome，**不需要** `playwright install` 下载内核。
 
-本地目录名可用任意其一；上传平台时 `name` 字段以 SKILL.md 中的 `douyin-to-wechat-draft` 为准。
+## 配置
+
+### 唯一必配项：微信开发凭证
+
+获取路径：**公众号后台 → 设置与开发 → 开发管理 → 开发接口管理 → 基本配置**
+（AppSecret 点「重置」后可见，**只显示一次**）。
+
+```bash
+mkdir -p ~/.workbuddy/secrets
+cp config.example.env ~/.workbuddy/secrets/wechat-mp.env
+$EDITOR ~/.workbuddy/secrets/wechat-mp.env
+```
+
+```ini
+WECHAT_APPID=wx0000000000000000
+WECHAT_SECRET=your-app-secret-here
+WECHAT_API_BASE=https://api.weixin.qq.com   # 可选，一般不改
+WECHAT_ACCOUNT=你的公众号名称                # 可选，仅日志标注
+```
+
+**填写位置与优先级**
+
+| 配置项 | 必填 | 填写位置 | 优先级 |
+|---|---|---|---|
+| `WECHAT_APPID` / `WECHAT_SECRET` | ✅ | 环境变量 → `--env` 文件 → `config.example.env` 模板 | 环境变量最高 |
+| `WECHAT_API_BASE`（**API 地址**） | ⭕ | `--api-base` 参数 → 环境变量 → `--env` 文件 | 命令行最高 |
+| `WECHAT_ACCOUNT` | ⭕ | `--env` 文件 | — |
+
+**切勿把真实凭证提交到仓库或上传到技能市场**；`config.example.env` 只含占位符，可以公开。
+详细字段与接口说明见 [`references/api-spec.md`](references/api-spec.md)。
+
+## 调用示例
+
+**对话触发**（安装后在 WorkBuddy 里直接说）：
+
+```
+把这个抖音链接推到公众号草稿箱：https://v.douyin.com/XXXXXX/
+润色后发公众号：https://v.douyin.com/YYYYYY/
+一鱼两吃，把我这条口播转成公众号文章
+这个视频讲了什么？给我逐字稿          ← 只走到逐字稿，不推草稿箱
+```
+
+**手动调脚本**：
+
+```bash
+# 取流 + 拿作者信息
+python3 scripts/grab_stream.py <VIDEO_ID>
+
+# 推送
+python3 scripts/push_draft.py \
+  --html article_raw.html \
+  --cover cover.jpg \
+  --images-dir images \
+  --author "你的作者名" \
+  --digest "最想被转发的那句，≤120字" \
+  --env ~/.workbuddy/secrets/wechat-mp.env
+```
+
+完整场景与一次真实跑通记录见 [`references/examples.md`](references/examples.md)。
+
+## 目录结构
+
+```
+douyin-to-wechat-draft/
+├── SKILL.md                      # ★ 技能定义（frontmatter + 步骤 + 元信息）
+├── README.md                     # 本文件
+├── LICENSE                       # MIT
+├── CONTRIBUTING.md               # 贡献指南（本地开发 / 提交规范 / 敏感信息红线）
+├── CHANGELOG.md                  # 变更记录
+├── requirements.txt              # 依赖声明（Playwright / faster-whisper）
+├── config.example.env            # 配置模板（含 API 地址占位符，无密钥）
+├── .gitignore
+├── references/                   # 详细实现（SKILL.md 用 @references/xxx.md 引用）
+│   ├── transcribe.md             # 抓流 + 转写 + 错字修正
+│   ├── image-selection.md        # 配图与封面（命名与压缩硬约定）
+│   ├── html-template.md          # 公众号版式 + base64 注入
+│   ├── troubleshooting.md        # 排错清单 + 回读核验代码 + 实跑基线
+│   ├── api-spec.md               # 微信 API 规范 + 关键配置项填写位置
+│   ├── examples.md               # 使用示例 + 实跑记录
+│   └── faq.md                    # 常见问题
+├── scripts/                      # 可执行脚本
+│   ├── grab_stream.py            # 浏览器内取流（Playwright + 系统 Chrome）
+│   └── push_draft.py             # 推送草稿箱（仅标准库）
+└── templates/
+    └── article_raw.html          # 正文模板（IMG_01..IMG_04 占位符 + <h1>）
+```
+
+## 发布
+
+### WorkBuddy 开放平台
+
+1. 将 `douyin-to-wechat-draft/` 目录压缩为 zip，**确保 `SKILL.md` 位于压缩包第一层**
+   （即 zip 内第一层是 `douyin-to-wechat-draft/` 且该目录内含 `SKILL.md`）
+2. 打开 [open.workbuddy.cn](https://open.workbuddy.cn) → 添加技能 → 创建技能 → 上传 zip
+3. 填写市场展示名称、能力介绍、分类与服务类目 → 提交审核（通常 1–3 个工作日）
+
+**规范注意**
+- `name`（slug）为 `douyin-to-wechat-draft`，**全平台唯一、发布后不可改**，上传前先确认未被占用
+- `description` 必须写**确定性触发场景**，不得含「可能 / 也许 / 万能」等模糊词（会驳回）
+- 脚本不得含「下载后执行」、不得读取系统敏感目录；`push_draft.py` 仅用标准库调微信 API
+- 密钥不上传，仅由使用者本地配置
+
+### GitHub
+
+仓库：https://github.com/amandamode/Amanda-douyin-to-wechat-draft
+（命名遵循作者约定：所有开源 skill 仓库统一加 `Amanda-` 前缀；平台 slug 不加前缀，两套命名互不影响）
+
+```bash
+# 1. 初始化
+git init -b main
+git remote add origin https://github.com/amandamode/Amanda-douyin-to-wechat-draft.git
+
+# 2. 提交
+git add -A
+git commit -m "feat: v1.2.0 — 补齐依赖声明、配置模板、API 规范、示例与 FAQ"
+
+# 3. 打标签
+git tag -a v1.2.0 -m "v1.2.0"
+
+# 4. 推送
+git push -u origin main
+git push origin v1.2.0
+```
 
 ## 许可证
 
-MIT —— 见 [LICENSE](./LICENSE)。
+MIT —— 见 [LICENSE](./LICENSE)。贡献流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。

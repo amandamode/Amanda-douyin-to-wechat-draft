@@ -64,6 +64,8 @@ def main():
                     help="存放 01.jpg..04.jpg 的目录 (默认: 与 html 同级的 images/)")
     ap.add_argument("--env", default=os.path.expanduser("~/.workbuddy/secrets/wechat-mp.env"),
                     help="含 WECHAT_APPID/WECHAT_SECRET 的 .env 文件路径")
+    ap.add_argument("--api-base", default=None,
+                    help="微信 API 基地址（默认读环境变量 WECHAT_API_BASE，再退回 https://api.weixin.qq.com）")
     args = ap.parse_args()
 
     env = load_env(args.env)
@@ -71,6 +73,10 @@ def main():
     secret = os.environ.get("WECHAT_SECRET") or env.get("WECHAT_SECRET")
     if not appid or not secret:
         sys.exit("缺少凭证：请设置环境变量 WECHAT_APPID/WECHAT_SECRET，或用 --env 指定含密钥的文件")
+
+    api_base = (args.api_base or os.environ.get("WECHAT_API_BASE")
+                or env.get("WECHAT_API_BASE") or "https://api.weixin.qq.com").rstrip("/")
+    print(f"[api] {api_base}")
 
     img_dir = args.images_dir
     if not os.path.isabs(img_dir):
@@ -96,7 +102,7 @@ def main():
     print(f"[title] {title} ({len(title)} 字)")
 
     token = http_json(
-        f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={appid}&secret={secret}"
+        f"{api_base}/cgi-bin/token?grant_type=client_credential&appid={appid}&secret={secret}"
     ).get("access_token")
     if not token:
         sys.exit("获取 access_token 失败（检查 AppID/Secret 与 API IP 白名单）")
@@ -106,7 +112,7 @@ def main():
     for key, path in images.items():
         data = open(path, "rb").read()
         body, ctype = multipart("media", os.path.basename(path), data)
-        r = http_json(f"https://api.weixin.qq.com/cgi-bin/media/uploadimg?access_token={token}",
+        r = http_json(f"{api_base}/cgi-bin/media/uploadimg?access_token={token}",
                       body, {"Content-Type": ctype})
         if "url" not in r:
             sys.exit(f"uploadimg 失败: {r}")
@@ -121,7 +127,7 @@ def main():
     # 4) 封面永久素材
     cdata = open(args.cover, "rb").read()
     body, ctype = multipart("media", "cover.jpg", cdata)
-    r = http_json(f"https://api.weixin.qq.com/cgi-bin/material/add_material?access_token={token}&type=image",
+    r = http_json(f"{api_base}/cgi-bin/material/add_material?access_token={token}&type=image",
                   body, {"Content-Type": ctype})
     thumb = r.get("media_id")
     if not thumb:
@@ -138,7 +144,7 @@ def main():
         "need_open_comment": 0,
         "only_fans_can_comment": 0,
     }]}
-    r = http_json(f"https://api.weixin.qq.com/cgi-bin/draft/add?access_token={token}",
+    r = http_json(f"{api_base}/cgi-bin/draft/add?access_token={token}",
                   json.dumps(payload, ensure_ascii=False).encode(),
                   {"Content-Type": "application/json; charset=utf-8"})
     print("[draft/add]", json.dumps(r, ensure_ascii=False))
